@@ -33,8 +33,7 @@ MAPA_INSTITUICAO_MODULO = {
     "STRIPE": None,  # Não possui módulo específico
 }
 
-PASTA_IMAGENS = "data/inst"
-DATA_DIR = "data"
+from config import PASTA_INST as PASTA_IMAGENS, JSON_PESSOAS
 
 def processar_comprovante(caminho_arquivo, pessoas):
     """
@@ -176,7 +175,7 @@ def main():
     """Função principal para testes."""
     # Carrega pessoas
     try:
-        with open("data/pessoas.json", encoding="utf-8") as f:
+        with open(JSON_PESSOAS, encoding="utf-8") as f:
             pessoas_data = json.load(f)
             if isinstance(pessoas_data, list):
                 pessoas = pessoas_data
