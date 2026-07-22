@@ -12,10 +12,7 @@ except Exception:
 
 
 # Pasta padrão para execução rápida (comportamento: `python preprocess.py -d data -o data`)
-if sys.platform == "win32":
-    PASTA_IMAGENS = r"C:\Users\brunoquaiatti\Documents\GitHub\gazofilacio-scripts\geral"
-else:
-    PASTA_IMAGENS = "/home/node/data/"
+from config import PASTA_IMAGENS
 
 
 def pil_unsharp(img, radius=2, percent=150, threshold=3):

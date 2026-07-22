@@ -2,10 +2,11 @@
 import os
 import json
 import requests
+from config import JSON_PESSOAS
 
 API_URL = "https://hkcbddzaurlkopeypkgm.supabase.co/functions/v1/api-gateway/dizimistas"
 TOKEN = os.getenv("SUPABASE_TOKEN")
-OUTPUT_FILE = "/home/node/data/pessoas.json"
+OUTPUT_FILE = JSON_PESSOAS
 
 def fetch_dizimistas():
     if not TOKEN:

@@ -10,12 +10,7 @@ try:
 except Exception:
     pytesseract = None
 
-if sys.platform == "win32":
-    PASTA_IMAGENS = r"C:\Users\brunoquaiatti\Documents\GitHub\gazofilacio-scripts\geral"
-    JSON_PESSOAS  = r"C:\Users\brunoquaiatti\Documents\GitHub\gazofilacio-scripts\geral\pessoas.json"
-else:
-    PASTA_IMAGENS = "/home/node/data/"
-    JSON_PESSOAS  = "/home/node/data/pessoas.json"
+from config import PASTA_IMAGENS, JSON_PESSOAS
 
 
 # PADROES

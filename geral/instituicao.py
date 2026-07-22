@@ -14,10 +14,7 @@ try:
 except Exception:
     pdfplumber = None
     
-if sys.platform == "win32":
-    PASTA_IMAGENS = r"C:\Users\brunoquaiatti\Documents\GitHub\gazofilacio-scripts\geral"
-else:
-    PASTA_IMAGENS = "/home/node/data/"
+from config import PASTA_IMAGENS
 
 def normalizar(txt):
     if not txt:

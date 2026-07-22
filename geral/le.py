@@ -9,10 +9,7 @@ import pytesseract
 # ==============================
 # CONFIG
 # ==============================
-#PASTA_IMAGENS = "/home/node/imagens"
-#CSV_PESSOAS   = "/home/node/data/pessoas.csv"
-PASTA_IMAGENS = "data/"
-CSV_PESSOAS   = "pessoas.csv"
+from config import PASTA_IMAGENS, CSV_PESSOAS
 
 # ==============================
 # REGEX
