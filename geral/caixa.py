@@ -20,10 +20,12 @@ try:
 except Exception:
     extrair_instituicao_do_texto = None
     
-PASTA_IMAGENS = "/home/node/data/"
-JSON_PESSOAS  = "/home/node/data/pessoas.json"
-#PASTA_IMAGENS = r"C:\Users\brunoquaiatti\Documents\automacao-dizimo\data"
-#JSON_PESSOAS  = r"C:\Users\brunoquaiatti\Documents\automacao-dizimo\data\pessoas.json"
+if sys.platform == "win32":
+    PASTA_IMAGENS = r"C:\Users\brunoquaiatti\Documents\GitHub\gazofilacio-scripts\geral"
+    JSON_PESSOAS  = r"C:\Users\brunoquaiatti\Documents\GitHub\gazofilacio-scripts\geral\pessoas.json"
+else:
+    PASTA_IMAGENS = "/home/node/data/"
+    JSON_PESSOAS  = "/home/node/data/pessoas.json"
     
 
 # PADROES
