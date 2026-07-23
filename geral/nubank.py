@@ -2,16 +2,15 @@ import os
 import re
 import unicodedata
 import sys
-import json
 
-try:    
+try:
     from PIL import Image
     import pytesseract
 except Exception:
     pytesseract = None
 
-from config import PASTA_IMAGENS, JSON_PESSOAS
-    
+from config import PASTA_IMAGENS
+
 
 
 # PADROES
@@ -33,64 +32,11 @@ def title_case(txt):
         return txt
     return " ".join(word.capitalize() for word in txt.split())
 
-def carregar_pessoas_json():
-    """Carrega pessoas a partir de um arquivo JSON local.
-    Retorna lista de dicts {'id': <str>, 'nome': <NORMALIZED_NAME>}.
-    """
-    pessoas = []
-    try:
-        with open(JSON_PESSOAS, encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception:
-        return []
-
-    items = []
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict):
-        if "data" in data and isinstance(data["data"], list):
-            items = data["data"]
-        else:
-            # procura a primeira lista dentro do dict
-            for v in data.values():
-                if isinstance(v, list):
-                    items = v
-                    break
-            if not items:
-                # trata um único objeto como lista de 1
-                items = [data]
-    else:
-        return []
-
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        id_keys = [k for k in ("codigo_dizimista", "codigo", "codigo_id", "id", "ID") if k in it]
-        name_keys = [k for k in ("nome_completo", "nome", "full_name", "name", "NOME") if k in it]
-
-        if not name_keys or not id_keys:
-            for k, v in it.items():
-                if not name_keys and isinstance(v, str) and re.search(r"[A-Za-zÀ-ú]", v) and len(v.split()) >= 2:
-                    name_keys = [k]
-                if not id_keys and (isinstance(v, (str, int)) and re.fullmatch(r"\d+", str(v))):
-                    id_keys = [k]
-
-        if name_keys and id_keys:
-            idv = str(it[id_keys[0]])
-            namev = it[name_keys[0]]
-            pessoas.append({"id": re.sub(r"\s+", "", idv), "nome": normalizar(str(namev))})
-
-    return pessoas
-
-def achar_id(nome, pessoas):
-    """
-    Retorna o ID da pessoa usando SOMENTE correspondência exata
-    após normalização (sem fallbacks por tokens).
-    """
-    nome_norm = normalizar(nome)
-    for p in pessoas:
-        if p["nome"] == nome_norm:
-            return p["id"]
+def achar_id(nome):
+    from busca_dizimistas import buscar_por_alias
+    resultados = buscar_por_alias(nome) or []
+    if resultados:
+        return str(resultados[0].get("codigo_dizimista"))
     return None
 
 MESES_ABREV = {
@@ -345,7 +291,7 @@ def validar_data_no_texto(texto):
     return None
 
 
-def processar_imagem(caminho_imagem, pessoas):
+def processar_imagem(caminho_imagem, pessoas=None):
     resultado = {"arquivo": os.path.basename(caminho_imagem), "data": None, "valor": None, "nome": None, "id": None, "ok": False, "erro": None}
 
     if pytesseract is None:
@@ -378,7 +324,7 @@ def processar_imagem(caminho_imagem, pessoas):
         data = validar_data_no_texto(texto)
         hora = extrair_hora(texto)
 
-        pid = achar_id(nome, pessoas) if nome else None
+        pid = achar_id(nome) if nome else None
 
         resultado.update({"data": data, "valor": valor, "nome": nome, "id": pid, "hora": hora})
 
@@ -392,17 +338,6 @@ def processar_imagem(caminho_imagem, pessoas):
 
 
 def main():
-    # Integração com API temporariamente comentada por solicitação.
-    # pessoas = carregar_pessoas_api()
-    # if not pessoas:
-    #     print("Erro: API de pessoas retornou vazia ou falhou. A execução continuará sem mapeamento de IDs.")
-    # Por enquanto, usa o CSV local como fonte de pessoas
-    # Carrega pessoas exclusivamente do JSON local
-    pessoas = carregar_pessoas_json()
-    if not pessoas:
-        print(f"Atenção: não foi possível carregar pessoas de {JSON_PESSOAS} ou arquivo vazio")
-        pessoas = []
-
     if pytesseract is None:
         print("pytesseract não encontrado. Instale tesseract e torne-o acessível no PATH antes de rodar.")
         print("No Windows, instale Tesseract-OCR e adicione o diretório bin ao PATH.")
@@ -420,7 +355,7 @@ def main():
 
     for f in arquivos:
         caminho = os.path.join(DATA_DIR, f)
-        r = processar_imagem(caminho, pessoas)
+        r = processar_imagem(caminho)
 
         # Spool no formato solicitado
         # Cleanup nome: remove accidental leading labels from OCR (e.g. 'NOME ', 'ORIGEM ')

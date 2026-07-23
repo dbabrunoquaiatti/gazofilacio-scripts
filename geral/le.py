@@ -1,6 +1,5 @@
 import os
 import re
-import csv
 import unicodedata
 from PIL import Image
 from pdf2image import convert_from_path
@@ -9,7 +8,7 @@ import pytesseract
 # ==============================
 # CONFIG
 # ==============================
-from config import PASTA_IMAGENS, CSV_PESSOAS
+from config import PASTA_IMAGENS
 
 # ==============================
 # REGEX
@@ -33,63 +32,11 @@ def normalizar(txt):
     txt = "".join(c for c in txt if not unicodedata.combining(c))
     return txt.upper().strip()
 
-# ==============================
-# CSV
-# ==============================
-def carregar_pessoas():
-    pessoas = []
-
-    with open(CSV_PESSOAS, encoding="utf-8-sig", newline="") as f:
-        amostra = f.read(2048)
-        f.seek(0)
-
-        if ";" in amostra:
-            delim = ";"
-        elif "\t" in amostra:
-            delim = "\t"
-        else:
-            delim = ","
-
-        reader = csv.reader(f, delimiter=delim)
-        cabecalho = next(reader)
-        cab = [normalizar(c) for c in cabecalho]
-
-        POSSIVEIS_ID   = ["ID", "CODIGO", "COD", "IDENTIFICADOR"]
-        POSSIVEIS_NOME = ["NOME COMPLETO", "NOME", "PESSOA"]
-
-        idx_id = next((cab.index(c) for c in POSSIVEIS_ID if c in cab), None)
-        idx_nm = next((cab.index(c) for c in POSSIVEIS_NOME if c in cab), None)
-
-        if idx_id is None or idx_nm is None:
-            raise Exception("CSV INVALIDO")
-
-        for row in reader:
-            if len(row) <= max(idx_id, idx_nm):
-                continue
-
-            pessoas.append({
-                "id": re.sub(r"\s+", "", row[idx_id]),
-                "nome": normalizar(row[idx_nm])
-            })
-
-    return pessoas
-
-def achar_id(nome, pessoas):
-    nome = normalizar(nome)
-
-    # Tentativa 1: correspondência exata
-    for p in pessoas:
-        if p["nome"] == nome:
-            return p["id"]
-
-    # Tentativa 2: correspondência por tokens (todas as palavras do nome extraído
-    # estão presentes no nome cadastrado) — útil para variações/ordem/abreviações
-    tokens = [t for t in nome.split() if len(t) > 1]
-    if tokens:
-        for p in pessoas:
-            if all(tok in p["nome"] for tok in tokens):
-                return p["id"]
-
+def achar_id(nome):
+    from busca_dizimistas import buscar_por_alias
+    resultados = buscar_por_alias(nome) or []
+    if resultados:
+        return str(resultados[0].get("codigo_dizimista"))
     return None
 
 # ==============================
@@ -279,7 +226,7 @@ def extrair_valor_correto(texto):
 # ==============================
 # PROCESSAMENTO
 # ==============================
-def processar_arquivo(arquivo, pessoas):
+def processar_arquivo(arquivo, pessoas=None):
     caminho = os.path.join(PASTA_IMAGENS, arquivo)
 
     try:
@@ -326,7 +273,7 @@ def processar_arquivo(arquivo, pessoas):
         nome = extrair_nome_do_texto(linhas)
         
         # Busca o ID no CSV usando o nome extraído
-        pid = achar_id(nome, pessoas) if nome else None
+        pid = achar_id(nome) if nome else None
 
         # Debug: mostrar todos os valores encontrados
         todos_valores = re.findall(PADRAO_VALOR, texto)
@@ -350,12 +297,10 @@ def processar_arquivo(arquivo, pessoas):
 # MAIN
 # ==============================
 if __name__ == "__main__":
-    pessoas = carregar_pessoas()
-
     arquivos = [
         f for f in os.listdir(PASTA_IMAGENS)
         if f.lower().endswith((".png", ".jpg", ".jpeg", ".pdf"))
     ]
 
     for arq in arquivos:
-        processar_arquivo(arq, pessoas)
+        processar_arquivo(arq)

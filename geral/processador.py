@@ -7,7 +7,6 @@ e usa o módulo apropriado para extração de dados.
 
 import os
 import sys
-import json
 import importlib
 from PIL import Image
 import pytesseract
@@ -33,16 +32,15 @@ MAPA_INSTITUICAO_MODULO = {
     "STRIPE": None,  # Não possui módulo específico
 }
 
-from config import PASTA_INST as PASTA_IMAGENS, JSON_PESSOAS
+from config import PASTA_INST as PASTA_IMAGENS
 
-def processar_comprovante(caminho_arquivo, pessoas):
+def processar_comprovante(caminho_arquivo):
     """
     Processa um comprovante de forma universal.
-    
+
     Args:
         caminho_arquivo (str): Caminho para o arquivo (JPEG, PNG, ou PDF)
-        pessoas (list): Lista de dicts com informações de pessoas
-        
+
     Returns:
         dict: Resultado do processamento com os dados extraídos
     """
@@ -118,7 +116,7 @@ def processar_comprovante(caminho_arquivo, pessoas):
             return resultado
         
         # Processa com o módulo específico
-        resultado_modulo = modulo.processar_imagem(caminho_arquivo, pessoas)
+        resultado_modulo = modulo.processar_imagem(caminho_arquivo)
         
         # Mescla resultados
         resultado.update(resultado_modulo)
@@ -132,14 +130,13 @@ def processar_comprovante(caminho_arquivo, pessoas):
     return resultado
 
 
-def processar_diretorio(diretorio, pessoas):
+def processar_diretorio(diretorio):
     """
     Processa todos os comprovantes de um diretório.
-    
+
     Args:
         diretorio (str): Caminho do diretório
-        pessoas (list): Lista de pessoas
-        
+
     Returns:
         list: Lista de resultados de processamento
     """
@@ -160,7 +157,7 @@ def processar_diretorio(diretorio, pessoas):
         caminho = os.path.join(diretorio, arquivo)
         print(f"Processando: {arquivo}...", end=" ", flush=True)
         
-        resultado = processar_comprovante(caminho, pessoas)
+        resultado = processar_comprovante(caminho)
         resultados.append(resultado)
         
         if resultado["ok"]:
@@ -173,29 +170,13 @@ def processar_diretorio(diretorio, pessoas):
 
 def main():
     """Função principal para testes."""
-    # Carrega pessoas
-    try:
-        with open(JSON_PESSOAS, encoding="utf-8") as f:
-            pessoas_data = json.load(f)
-            if isinstance(pessoas_data, list):
-                pessoas = pessoas_data
-            elif isinstance(pessoas_data, dict) and "data" in pessoas_data:
-                pessoas = pessoas_data["data"]
-            else:
-                pessoas = []
-    except Exception:
-        print("Aviso: Não foi possível carregar pessoas.json")
-        pessoas = []
-    
-    # Processa imagens
     print(f"Começando processamento...")
-    print(f"Carregadas {len(pessoas)} pessoas\n")
-    
+
     if len(sys.argv) > 1:
         # Processa arquivo específico
         for arquivo in sys.argv[1:]:
             print(f"\n=== {os.path.basename(arquivo)} ===")
-            resultado = processar_comprovante(arquivo, pessoas)
+            resultado = processar_comprovante(arquivo)
             print(f"Instituição: {resultado['instituicao']} (confiança: {resultado['confianca_instituicao']:.2f})")
             print(f"Módulo: {resultado['modulo_usado']}")
             print(f"Data: {resultado['data']}")
@@ -207,7 +188,7 @@ def main():
                 print(f"Erro: {resultado['erro']}")
     else:
         # Processa todo o diretório
-        resultados = processar_diretorio(PASTA_IMAGENS, pessoas)
+        resultados = processar_diretorio(PASTA_IMAGENS)
         
         print(f"\n\n=== RESUMO ===")
         print(f"Total processado: {len(resultados)}")
