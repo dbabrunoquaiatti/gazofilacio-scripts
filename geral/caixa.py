@@ -266,7 +266,6 @@ def extrair_valor_correto(texto):
     return None
 # --- fim das funções incorporadas ---
 
-DATA_DIR = "data"
 
 
 def validar_data_no_texto(texto):
@@ -321,7 +320,7 @@ def processar_imagem(caminho_imagem, pessoas=None):
 
         # Modo debug: salvar texto OCR e os matches de valores para inspeção
         if os.environ.get("DEBUG_OCR"):
-            debug_path = os.path.join(DATA_DIR, os.path.basename(caminho_imagem) + ".ocr.txt")
+            debug_path = os.path.join(PASTA_IMAGENS, os.path.basename(caminho_imagem) + ".ocr.txt")
             with open(debug_path, "w", encoding="utf-8") as dbg:
                 dbg.write(texto)
                 dbg.write("\n\n--VALORES ENCONTRADOS PELO PADRAO--\n")
@@ -407,7 +406,7 @@ def main():
     else:
         # Caso contrário, lista todos os arquivos (imagens e PDFs) no diretório
         arquivos = [
-            f for f in os.listdir(DATA_DIR)
+            f for f in os.listdir(PASTA_IMAGENS)
             if f.lower().endswith((".jpg", ".jpeg", ".png", ".pdf"))
         ]
 
@@ -416,7 +415,7 @@ def main():
         if os.path.isabs(f) or os.path.exists(f):
             caminho = f
         else:
-            caminho = os.path.join(DATA_DIR, f)
+            caminho = os.path.join(PASTA_IMAGENS, f)
         
         # Verifica se é PDF ou imagem
         if f.lower().endswith(".pdf"):

@@ -245,7 +245,6 @@ def extrair_valor_correto(texto):
     return None
 # --- fim das funções incorporadas ---
 
-DATA_DIR = "data"
 
 
 def validar_data_no_texto(texto):
@@ -300,7 +299,7 @@ def processar_imagem(caminho_imagem, pessoas=None):
 
         # Modo debug: salvar texto OCR e os matches de valores para inspeção
         if os.environ.get("DEBUG_OCR"):
-            debug_path = os.path.join(DATA_DIR, os.path.basename(caminho_imagem) + ".ocr.txt")
+            debug_path = os.path.join(PASTA_IMAGENS, os.path.basename(caminho_imagem) + ".ocr.txt")
             with open(debug_path, "w", encoding="utf-8") as dbg:
                 dbg.write(texto)
                 dbg.write("\n\n--VALORES ENCONTRADOS PELO PADRAO--\n")
@@ -339,7 +338,7 @@ def main():
     else:
         # Caso contrário, lista todos os arquivos de imagem no diretório
         arquivos = [
-            f for f in os.listdir(DATA_DIR)
+            f for f in os.listdir(PASTA_IMAGENS)
             if f.lower().endswith((".jpg", ".jpeg", ".png"))
         ]
 
@@ -347,15 +346,15 @@ def main():
         # Normaliza separadores para o padrão do SO
         f = f.replace("/", os.sep).replace("\\", os.sep)
         
-        # Se já começa com DATA_DIR, usa direto (evita duplicação)
-        if f.startswith(DATA_DIR + os.sep) or f.startswith(DATA_DIR):
+        # Se já começa com PASTA_IMAGENS, usa direto (evita duplicação)
+        if f.startswith(PASTA_IMAGENS + os.sep) or f.startswith(PASTA_IMAGENS):
             caminho = f
-        # Se tem caminho (tipo "inst/arquivo.jpeg"), junta com DATA_DIR
+        # Se tem caminho (tipo "inst/arquivo.jpeg"), junta com PASTA_IMAGENS
         elif os.sep in f:
-            caminho = os.path.join(DATA_DIR, f)
+            caminho = os.path.join(PASTA_IMAGENS, f)
         # Senão, é arquivo simples
         else:
-            caminho = os.path.join(DATA_DIR, f)
+            caminho = os.path.join(PASTA_IMAGENS, f)
         
         r = processar_imagem(caminho)
 
