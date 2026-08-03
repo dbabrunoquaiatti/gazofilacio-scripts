@@ -18,6 +18,19 @@ def buscar_por_alias(alias):
     except requests.exceptions.RequestException:
         return None
 
+def buscar_por_nome(nome):
+    try:
+        headers = {"X-API-Key": TOKEN}
+        response = requests.get(API_URL, headers=headers, params={"nome": nome})
+        response.raise_for_status()
+
+        data = response.json()
+        resultados = data.get("data", data)
+        return resultados if resultados else None
+
+    except requests.exceptions.RequestException:
+        return None
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Uso: python busca_dizimistas.py <nome>")
@@ -27,6 +40,10 @@ if __name__ == "__main__":
     print(f"Buscando: {nome}...")
 
     resultados = buscar_por_alias(nome)
+
+    if resultados is None:
+        print("Fallback: buscando por nome...")
+        resultados = buscar_por_nome(nome)
 
     if resultados is None:
         print("Erro ao buscar.")
