@@ -32,8 +32,8 @@ def title_case(txt):
     return " ".join(word.capitalize() for word in txt.split())
 
 def achar_id(nome):
-    from busca_dizimistas import buscar_por_alias
-    resultados = buscar_por_alias(nome) or []
+    from busca_dizimistas import buscar_dizimista
+    resultados = buscar_dizimista(nome) or []
     if resultados:
         return str(resultados[0].get("codigo_dizimista"))
     return None
@@ -94,6 +94,10 @@ def extrair_hora(texto):
         return f"{h}:{m}"
     return None
 
+def _limpar_nome(txt):
+    """Remove caracteres não-letra, colapsa espaços duplos e normaliza bordas."""
+    return re.sub(r"\s+", " ", re.sub(r"[^A-Z\s]", " ", txt)).strip()
+
 _LABELS_CONTINUACAO = re.compile(
     r"CPF|CNPJ|INSTITUI|VALOR|DATA|HORA|PIX|BANCO|QUEM|SOBRE|ID\b", re.IGNORECASE
 )
@@ -105,12 +109,12 @@ def _nome_com_continuacao(linhas, idx_nome):
     if not m:
         return None
     nome_norm = normalizar(m.group(1).strip())
-    nome = re.sub(r"[^A-Z\s]", "", nome_norm).strip()
+    nome = _limpar_nome(nome_norm)
     # verifica se próxima linha é continuação (ex: sobrenome na linha seguinte)
     if idx_nome + 1 < len(linhas):
         prox = linhas[idx_nome + 1].strip()
         prox_norm = normalizar(prox)
-        prox_clean = re.sub(r"[^A-Z\s]", "", prox_norm).strip()
+        prox_clean = _limpar_nome(prox_norm)
         if (prox_clean
                 and not _LABELS_CONTINUACAO.search(prox_clean)
                 and not re.search(r"\d", prox)
@@ -141,7 +145,7 @@ def extrair_nome_do_texto(linhas):
         nome_raw = m.group(1).strip()
         if re.search(r"[A-Za-zÀ-ú]", nome_raw):
             nome_norm = normalizar(nome_raw)
-            nome = re.sub(r"[^A-Z\s]", "", nome_norm)
+            nome = _limpar_nome(nome_norm)
             if len(nome.split()) >= 2:
                 return nome
 
@@ -151,8 +155,7 @@ def extrair_nome_do_texto(linhas):
             # tenta conteúdo na mesma linha após 'Origem'
             m2 = re.search(r"Origem\s*:??\s*(.+)$", ln, re.IGNORECASE)
             if m2 and re.search(r"[A-Za-zÀ-ú]", m2.group(1)):
-                candidato_norm = normalizar(m2.group(1).strip())
-                candidato_limpo = re.sub(r"[^A-Z\s]", "", candidato_norm)
+                candidato_limpo = _limpar_nome(normalizar(m2.group(1).strip()))
                 if len(candidato_limpo.split()) >= 2:
                     return candidato_limpo
 
@@ -161,9 +164,7 @@ def extrair_nome_do_texto(linhas):
             while j < len(linhas) and not linhas[j].strip():
                 j += 1
             if j < len(linhas):
-                candidato = linhas[j].strip()
-                candidato_norm = normalizar(candidato)
-                candidato_limpo = re.sub(r"[^A-Z\s]", "", candidato_norm)
+                candidato_limpo = _limpar_nome(normalizar(linhas[j].strip()))
                 return candidato_limpo if len(candidato_limpo.split()) >= 2 else None
 
     # 3) Fallback: procura todas as ocorrências de 'Nome' e prefere a última
@@ -173,8 +174,7 @@ def extrair_nome_do_texto(linhas):
         for mm in reversed(nome_matches):
             nome_raw = mm.group(1).strip()
             if re.search(r"[A-Za-zÀ-ú]", nome_raw):
-                nome_norm = normalizar(nome_raw)
-                nome = re.sub(r"[^A-Z\s]", "", nome_norm)
+                nome = _limpar_nome(normalizar(nome_raw))
                 if len(nome.split()) >= 2:
                     return nome
 
@@ -185,8 +185,7 @@ def extrair_nome_do_texto(linhas):
             if len(parts) > 1:
                 candidato = parts[-1].strip()
                 if re.search(r"[A-Za-zÀ-ú]", candidato):
-                    candidato_norm = normalizar(candidato)
-                    candidato_limpo = re.sub(r"[^A-Z\s]", "", candidato_norm)
+                    candidato_limpo = _limpar_nome(normalizar(candidato))
                     if len(candidato_limpo.split()) >= 2:
                         return candidato_limpo
 

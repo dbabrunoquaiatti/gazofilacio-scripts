@@ -97,6 +97,27 @@ def buscar_por_proximidade(nome_busca, pessoas, top=5, threshold=0.3):
     scored.sort(key=lambda x: x[0], reverse=True)
     return [p for _, p in scored[:top]]
 
+def _carregar_ou_buscar_todos():
+    """Lê pessoas.json se já existir (cache), senão busca tudo e salva."""
+    if os.path.exists(PESSOAS_FILE):
+        try:
+            with open(PESSOAS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return buscar_todos()
+
+def buscar_dizimista(nome):
+    """Pipeline completo: 1) alias  2) nome  3) proximidade via pessoas.json."""
+    resultados = buscar_por_alias(nome)
+    if not resultados:
+        resultados = buscar_por_nome(nome)
+    if not resultados:
+        todos = _carregar_ou_buscar_todos()
+        if todos:
+            resultados = buscar_por_proximidade(nome, todos)
+    return resultados or None
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Uso: python busca_dizimistas.py <nome>")
@@ -105,25 +126,10 @@ if __name__ == "__main__":
     nome = sys.argv[1]
     print(f"Buscando: {nome}...")
 
-    resultados = buscar_por_alias(nome)
-
-    if not resultados:
-        print("Fallback: buscando por nome...")
-        resultados = buscar_por_nome(nome)
-
-    if not resultados:
-        todos = buscar_todos()
-        if todos:
-            resultados = buscar_por_proximidade(nome, todos)
-            if resultados:
-                print(f"Matches por proximidade (top {len(resultados)}):")
-            else:
-                print("Nenhum match encontrado nem por proximidade.")
-        else:
-            print("Erro ao buscar todos os dizimistas.")
+    resultados = buscar_dizimista(nome)
 
     if resultados:
         for r in resultados:
             print(f"  Código: {r.get('codigo_dizimista')} | Nome: {r.get('nome_completo')} | Alias: {r.get('alias')}")
-    elif resultados is not None:
+    else:
         print("Nenhum resultado encontrado.")

@@ -32,8 +32,8 @@ def title_case(txt):
     return " ".join(word.capitalize() for word in txt.split())
 
 def achar_id(nome):
-    from busca_dizimistas import buscar_por_alias
-    resultados = buscar_por_alias(nome) or []
+    from busca_dizimistas import buscar_dizimista
+    resultados = buscar_dizimista(nome) or []
     if resultados:
         return str(resultados[0].get("codigo_dizimista"))
     return None
