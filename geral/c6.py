@@ -283,6 +283,17 @@ def validar_data_no_texto(texto):
         if re.match(r"\d{2}/\d{2}/\d{2}", found):
             return found
 
+    # Fallback: "DD de MES de YYYY" — formato do C6 após colapso de linhas
+    m_de = re.search(
+        r"\b(\d{1,2})\s+de\s+([A-Za-zÀ-ü]+)\s+de\s+(\d{4})\b",
+        texto_limpo, re.IGNORECASE
+    )
+    if m_de:
+        dia, mes_texto, ano = m_de.groups()
+        mes_norm = normalizar(mes_texto)
+        if mes_norm in MESES_ABREV:
+            return f"{dia.zfill(2)}/{MESES_ABREV[mes_norm]}/{ano[-2:]}"
+
     return None
 
 

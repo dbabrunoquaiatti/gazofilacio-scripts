@@ -49,7 +49,8 @@ def buscar_todos():
             if not pagina:
                 break
 
-            todos.extend(pagina)
+            _campos = ("nome_completo", "alias", "codigo_dizimista")
+            todos.extend({k: p[k] for k in _campos if k in p} for p in pagina)
 
             if len(pagina) < limit:
                 break
