@@ -33,7 +33,6 @@ def buscar_por_nome(nome):
 
 def buscar_todos():
     """Busca todos os dizimistas ativos paginando de 10 em 10 e salva em pessoas.json."""
-    print("Fallback total: buscando todos os dizimistas ativos...")
     headers = {"X-API-Key": TOKEN}
     todos = []
     offset = 0
@@ -51,21 +50,18 @@ def buscar_todos():
                 break
 
             todos.extend(pagina)
-            print(f"  Página offset={offset}: {len(pagina)} registros (total acumulado: {len(todos)})")
 
             if len(pagina) < limit:
                 break
 
             offset += limit
 
-        except requests.exceptions.RequestException as e:
-            print(f"  Erro na requisição (offset={offset}): {e}")
+        except requests.exceptions.RequestException:
             break
 
     if todos:
         with open(PESSOAS_FILE, "w", encoding="utf-8") as f:
             json.dump(todos, f, ensure_ascii=False, indent=2)
-        print(f"  Salvo em {PESSOAS_FILE} ({len(todos)} pessoas)")
 
     return todos if todos else None
 
