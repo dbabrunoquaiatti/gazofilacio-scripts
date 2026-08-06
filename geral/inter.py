@@ -227,6 +227,8 @@ def validar_data_no_texto(texto):
     return None
 
 
+PSM_CONFIGS = ["--psm 6", "--psm 3", "--psm 4"]
+
 def processar_imagem(caminho_imagem, pessoas=None):
     resultado = {"arquivo": os.path.basename(caminho_imagem), "data": None, "valor": None, "nome": None, "id": None, "ok": False, "erro": None}
 
@@ -236,29 +238,38 @@ def processar_imagem(caminho_imagem, pessoas=None):
 
     try:
         img = Image.open(caminho_imagem)
-        texto = pytesseract.image_to_string(img, lang="por", config="--psm 6")
 
-        # Modo debug: salvar texto OCR e os matches de valores para inspeção
-        if os.environ.get("DEBUG_OCR"):
-            debug_path = os.path.join(PASTA_IMAGENS, os.path.basename(caminho_imagem) + ".ocr.txt")
-            with open(debug_path, "w", encoding="utf-8") as dbg:
-                dbg.write(texto)
-                dbg.write("\n\n--VALORES ENCONTRADOS PELO PADRAO--\n")
-                dbg.write(str(re.findall(PADRAO_VALOR, texto)))
+        nome = valor = data = hora = None
 
-        # linhas para extrair nome com função existente
-        linhas = [l.strip() for l in texto.splitlines() if l.strip()]
+        for tentativa, psm in enumerate(PSM_CONFIGS, 1):
+            texto = pytesseract.image_to_string(img, lang="por", config=psm)
+            linhas = [l.strip() for l in texto.splitlines() if l.strip()]
 
-        nome = extrair_nome_do_texto(linhas)
-        valor = extrair_valor_correto(texto)
-        data = validar_data_no_texto(texto)
-        hora = extrair_hora(texto)
+            if nome is None:
+                nome = extrair_nome_do_texto(linhas)
+            if valor is None:
+                valor = extrair_valor_correto(texto)
+            if data is None:
+                data = validar_data_no_texto(texto)
+            if hora is None:
+                hora = extrair_hora(texto)
+
+            if tentativa == 1 and os.environ.get("DEBUG_OCR"):
+                debug_path = os.path.join(PASTA_IMAGENS, os.path.basename(caminho_imagem) + ".ocr.txt")
+                with open(debug_path, "w", encoding="utf-8") as dbg:
+                    dbg.write(texto)
+                    dbg.write("\n\n--VALORES ENCONTRADOS PELO PADRAO--\n")
+                    dbg.write(str(re.findall(PADRAO_VALOR, texto)))
+
+            if tentativa > 1:
+                print(f"  [retry {tentativa} psm={psm.split()[-1]}] nome={'ok' if nome else 'None'} data={'ok' if data else 'None'}")
+
+            if nome and data:
+                break
 
         pid = achar_id(nome) if nome else None
 
         resultado.update({"data": data, "valor": valor, "nome": nome, "id": pid, "hora": hora})
-
-        # marca ok se encontrou data e valor (e idealmente id)
         resultado["ok"] = bool(data and valor)
 
     except Exception as e:
