@@ -94,8 +94,46 @@ def extrair_hora(texto):
         return f"{h}:{m}"
     return None
 
+_LABELS_CONTINUACAO = re.compile(
+    r"CPF|CNPJ|INSTITUI|VALOR|DATA|HORA|PIX|BANCO|QUEM|SOBRE|ID\b", re.IGNORECASE
+)
+
+def _nome_com_continuacao(linhas, idx_nome):
+    """Extrai o nome da linha idx_nome e concatena a próxima se for continuação."""
+    ln = linhas[idx_nome]
+    m = re.search(r"(?:Nome|Origem)\s*\|?\s*:?\s*(.+)$", ln, re.IGNORECASE)
+    if not m:
+        return None
+    nome_norm = normalizar(m.group(1).strip())
+    nome = re.sub(r"[^A-Z\s]", "", nome_norm).strip()
+    # verifica se próxima linha é continuação (ex: sobrenome na linha seguinte)
+    if idx_nome + 1 < len(linhas):
+        prox = linhas[idx_nome + 1].strip()
+        prox_norm = normalizar(prox)
+        prox_clean = re.sub(r"[^A-Z\s]", "", prox_norm).strip()
+        if (prox_clean
+                and not _LABELS_CONTINUACAO.search(prox_clean)
+                and not re.search(r"\d", prox)
+                and len(prox_clean.split()) <= 3):
+            nome = (nome + " " + prox_clean).strip()
+    return nome if len(nome.split()) >= 2 else None
+
+
 def extrair_nome_do_texto(linhas):
     texto = "\n".join(linhas)
+
+    # 0) Seção "Quem pagou" — específico do Inter, captura nome + sobrenome em linha seguinte
+    idx_pagou = next(
+        (i for i, ln in enumerate(linhas) if re.search(r"quem\s+pagou", ln, re.IGNORECASE)),
+        None
+    )
+    if idx_pagou is not None:
+        for i in range(idx_pagou + 1, len(linhas)):
+            if re.search(r"\bNome\b", linhas[i], re.IGNORECASE):
+                nome = _nome_com_continuacao(linhas, i)
+                if nome:
+                    return nome
+                break
 
     # 1) Origem tem prioridade absoluta: tenta mesma linha primeiro
     m = re.search(r"(?:Origem)\s*:??\s*(.+?)(?:\n|$)", texto, re.IGNORECASE)
@@ -194,6 +232,8 @@ def validar_data_no_texto(texto):
 
     # Normaliza espaços não-quebreáveis e múltiplos espaços
     texto_limpo = texto.replace("\xa0", " ")
+    # Fallback: junta datas quebradas em duas linhas pelo OCR, ex: "05/\n08/2026" -> "05/08/2026"
+    texto_limpo = re.sub(r"(\d{1,2}/)\s*\n\s*(\d{2}/\d{2,4})", r"\1\2", texto_limpo)
     texto_limpo = re.sub(r"\s+", " ", texto_limpo)
 
     # 1) Tenta primeiro padrão com dia da semana (específico do Inter): "segunda, 10/03/2025"
@@ -261,8 +301,6 @@ def processar_imagem(caminho_imagem, pessoas=None):
                     dbg.write("\n\n--VALORES ENCONTRADOS PELO PADRAO--\n")
                     dbg.write(str(re.findall(PADRAO_VALOR, texto)))
 
-            if tentativa > 1:
-                print(f"  [retry {tentativa} psm={psm.split()[-1]}] nome={'ok' if nome else 'None'} data={'ok' if data else 'None'}")
 
             if nome and data:
                 break
