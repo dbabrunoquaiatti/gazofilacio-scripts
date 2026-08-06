@@ -1,35 +1,101 @@
 #!/usr/bin/env python3
 import sys
+import json
+import difflib
+import os
 import requests
 
 API_URL = "https://hkcbddzaurlkopeypkgm.supabase.co/functions/v1/api-gateway/dizimistas"
 TOKEN = "45ce65e6ac089bed6cbead711bb6fc170ed40f5a55d8df75ec046438a8232521"
+PESSOAS_FILE = os.path.join(os.path.dirname(__file__), "pessoas.json")
 
 def buscar_por_alias(alias):
     try:
         headers = {"X-API-Key": TOKEN}
-        response = requests.get(API_URL, headers=headers, params={"alias": alias})
+        response = requests.get(API_URL, headers=headers, params={"alias": alias, "status": "ativo"})
         response.raise_for_status()
-
         data = response.json()
         resultados = data.get("data", data)
         return resultados if resultados else None
-
     except requests.exceptions.RequestException:
         return None
 
 def buscar_por_nome(nome):
     try:
         headers = {"X-API-Key": TOKEN}
-        response = requests.get(API_URL, headers=headers, params={"nome": nome})
+        response = requests.get(API_URL, headers=headers, params={"nome": nome, "status": "ativo"})
         response.raise_for_status()
-
         data = response.json()
         resultados = data.get("data", data)
         return resultados if resultados else None
-
     except requests.exceptions.RequestException:
         return None
+
+def buscar_todos():
+    """Busca todos os dizimistas ativos paginando de 10 em 10 e salva em pessoas.json."""
+    print("Fallback total: buscando todos os dizimistas ativos...")
+    headers = {"X-API-Key": TOKEN}
+    todos = []
+    offset = 0
+    limit = 10
+
+    while True:
+        try:
+            params = {"status": "ativo", "limit": limit, "offset": offset}
+            response = requests.get(API_URL, headers=headers, params=params)
+            response.raise_for_status()
+            data = response.json()
+            pagina = data.get("data", data)
+
+            if not pagina:
+                break
+
+            todos.extend(pagina)
+            print(f"  Página offset={offset}: {len(pagina)} registros (total acumulado: {len(todos)})")
+
+            if len(pagina) < limit:
+                break
+
+            offset += limit
+
+        except requests.exceptions.RequestException as e:
+            print(f"  Erro na requisição (offset={offset}): {e}")
+            break
+
+    if todos:
+        with open(PESSOAS_FILE, "w", encoding="utf-8") as f:
+            json.dump(todos, f, ensure_ascii=False, indent=2)
+        print(f"  Salvo em {PESSOAS_FILE} ({len(todos)} pessoas)")
+
+    return todos if todos else None
+
+def _score_proximidade(nome_busca, nome_candidato):
+    """Retorna score 0..1 combinando ratio geral e cobertura de palavras."""
+    a = nome_busca.lower()
+    b = nome_candidato.lower()
+
+    ratio = difflib.SequenceMatcher(None, a, b).ratio()
+
+    palavras_busca = set(a.split())
+    palavras_candidato = set(b.split())
+    palavras_comuns = palavras_busca & palavras_candidato
+    cobertura = len(palavras_comuns) / len(palavras_busca) if palavras_busca else 0
+
+    return 0.4 * ratio + 0.6 * cobertura
+
+def buscar_por_proximidade(nome_busca, pessoas, top=5, threshold=0.3):
+    """Encontra os melhores matches por proximidade de nome."""
+    scored = []
+    for p in pessoas:
+        nome_candidato = p.get("nome_completo", "")
+        if not nome_candidato:
+            continue
+        score = _score_proximidade(nome_busca, nome_candidato)
+        if score >= threshold:
+            scored.append((score, p))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [p for _, p in scored[:top]]
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -41,14 +107,23 @@ if __name__ == "__main__":
 
     resultados = buscar_por_alias(nome)
 
-    if resultados is None:
+    if not resultados:
         print("Fallback: buscando por nome...")
         resultados = buscar_por_nome(nome)
 
-    if resultados is None:
-        print("Erro ao buscar.")
-    elif len(resultados) == 0:
-        print("Nenhum resultado encontrado.")
-    else:
+    if not resultados:
+        todos = buscar_todos()
+        if todos:
+            resultados = buscar_por_proximidade(nome, todos)
+            if resultados:
+                print(f"Matches por proximidade (top {len(resultados)}):")
+            else:
+                print("Nenhum match encontrado nem por proximidade.")
+        else:
+            print("Erro ao buscar todos os dizimistas.")
+
+    if resultados:
         for r in resultados:
             print(f"  Código: {r.get('codigo_dizimista')} | Nome: {r.get('nome_completo')} | Alias: {r.get('alias')}")
+    elif resultados is not None:
+        print("Nenhum resultado encontrado.")
