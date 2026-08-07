@@ -4,7 +4,7 @@ import unicodedata
 import sys
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageEnhance
     import pytesseract
 except Exception:
     pytesseract = None
@@ -103,8 +103,29 @@ def extrair_hora(texto):
         return f"{h}:{m}"
     return None
 
+def _strip_artefatos_inicio(nome):
+    """Remove letras soltas no início causadas por artefatos OCR (ex: 'S ROBERT' -> 'ROBERT')."""
+    palavras = nome.split()
+    while palavras and len(palavras[0]) == 1:
+        palavras = palavras[1:]
+    return " ".join(palavras)
+
 def extrair_nome_do_texto(linhas):
     texto = "\n".join(linhas)
+
+    # 0) Mercado Pago: "Origem e destino" é label de seção, nome está na linha seguinte
+    for i, ln in enumerate(linhas):
+        if re.search(r"origem\s+e\s+destino", ln, re.IGNORECASE):
+            j = i + 1
+            while j < len(linhas) and not linhas[j].strip():
+                j += 1
+            if j < len(linhas):
+                candidato_norm = normalizar(linhas[j].strip())
+                candidato_limpo = re.sub(r"\s+", " ", re.sub(r"[^A-Z\s]", " ", candidato_norm)).strip()
+                candidato_limpo = _strip_artefatos_inicio(candidato_limpo)
+                if len(candidato_limpo.split()) >= 2:
+                    return candidato_limpo
+            break
 
     # 1) 'De' tem prioridade absoluta: busca "De" seguido de nome
     m_de = re.search(r"De\s*\n\s*(.+?)(?:\nCPF|\nCNPJ|CPF|CNPJ|$)", texto, re.IGNORECASE | re.DOTALL)
@@ -196,20 +217,8 @@ def extrair_valor_correto(texto):
     pattern = re.compile(r"R\$\s*(\d+(?:[.,]\d+)*)", re.IGNORECASE)
     matches = list(pattern.finditer(txt))
     if matches:
-        # Retorna o último valor encontrado (geralmente é o total)
         return "R$ " + matches[-1].group(1)
-    
-    # 3) Fallback: procura por número simples no início (antes de "De" ou "Para") para Mercado Pago onde OCR falha
-    # Padrão: procura por Comprovante...data... depois um número simples antes de "De"
-    match_fallback = re.search(r"Comprovante.*?\d{1,2}/\w+/\d{4}.*?\s+(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)\s+(?:De|Para|de|para)", txt, re.IGNORECASE | re.DOTALL)
-    if match_fallback:
-        return "R$ " + match_fallback.group(1)
-        for m in matches:
-            start = max(0, m.start() - 40)
-            contexto = txt[start:m.start()].upper()
-            if "VALOR" in contexto or "TOTAL" in contexto or "R$" in contexto:
-                return m.group(2)
-        return matches[0].group(2)
+
     return None
 # --- fim das funções incorporadas ---
 
@@ -242,6 +251,33 @@ def validar_data_no_texto(texto):
         if re.match(r"\d{2}/\d{2}/\d{2}", found):
             return found
 
+    return None
+
+
+def _recuperar_centavos(img, inteiro):
+    """Faz crop na linha do R$ e re-OCR com whitelist de dígitos para pegar centavos em fonte pequena."""
+    try:
+        img_gray = img.convert("L")
+        data = pytesseract.image_to_data(img_gray, lang="por", config="--psm 6",
+                                         output_type=pytesseract.Output.DICT)
+        for i, palavra in enumerate(data["text"]):
+            if re.search(r"R\$|\$", str(palavra)):
+                top  = data["top"][i]
+                left = data["left"][i]
+                crop = img_gray.crop((left, max(0, top - 5), img_gray.width, top + 55))
+                crop = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
+                crop = ImageEnhance.Contrast(crop).enhance(3.0)
+                txt  = pytesseract.image_to_string(
+                    crop, lang="por",
+                    config="--psm 7 -c tessedit_char_whitelist=R$0123456789,."
+                ).strip()
+                digitos = re.sub(r"[^\d]", "", txt)
+                # ex: inteiro="84", digitos="8451" → centavos="51"
+                if digitos.startswith(inteiro) and len(digitos) == len(inteiro) + 2:
+                    return digitos[len(inteiro):]
+                break
+    except Exception:
+        pass
     return None
 
 
@@ -303,6 +339,13 @@ def processar_imagem(caminho_imagem, pessoas=None):
         valor = extrair_valor_correto(texto)
         data = validar_data_no_texto(texto)
         hora = extrair_hora(texto)
+
+        # centavos em fonte pequena ao lado do valor principal — OCR normal perde
+        if valor and re.match(r"^R\$ \d+$", valor) and "img" in dir():
+            inteiro = re.search(r"\d+", valor).group()
+            centavos = _recuperar_centavos(img, inteiro)
+            if centavos:
+                valor = f"R$ {inteiro},{centavos}"
 
         pid = achar_id(nome) if nome else None
 
