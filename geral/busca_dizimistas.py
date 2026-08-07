@@ -66,21 +66,26 @@ def buscar_todos():
 
     return todos if todos else None
 
+_PALAVRAS_IGNORADAS = {"de", "da", "do", "dos", "das", "e"}
+
 def _score_proximidade(nome_busca, nome_candidato):
-    """Retorna score 0..1 combinando ratio geral e cobertura de palavras."""
     a = nome_busca.lower()
     b = nome_candidato.lower()
 
-    ratio = difflib.SequenceMatcher(None, a, b).ratio()
-
-    palavras_busca = set(a.split())
-    palavras_candidato = set(b.split())
+    palavras_busca = set(a.split()) - _PALAVRAS_IGNORADAS
+    palavras_candidato = set(b.split()) - _PALAVRAS_IGNORADAS
     palavras_comuns = palavras_busca & palavras_candidato
+
+    # exige pelo menos 2 palavras significativas em comum
+    if len(palavras_comuns) < 2:
+        return 0.0
+
     cobertura = len(palavras_comuns) / len(palavras_busca) if palavras_busca else 0
+    ratio = difflib.SequenceMatcher(None, a, b).ratio()
 
     return 0.4 * ratio + 0.6 * cobertura
 
-def buscar_por_proximidade(nome_busca, pessoas, top=5, threshold=0.3):
+def buscar_por_proximidade(nome_busca, pessoas, top=3, threshold=0.5):
     """Encontra os melhores matches por proximidade de nome."""
     scored = []
     for p in pessoas:
@@ -95,13 +100,7 @@ def buscar_por_proximidade(nome_busca, pessoas, top=5, threshold=0.3):
     return [p for _, p in scored[:top]]
 
 def _carregar_ou_buscar_todos():
-    """Lê pessoas.json se já existir (cache), senão busca tudo e salva."""
-    if os.path.exists(PESSOAS_FILE):
-        try:
-            with open(PESSOAS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
+    """Sempre busca versão atualizada e salva em pessoas.json."""
     return buscar_todos()
 
 def buscar_dizimista(nome):
