@@ -357,19 +357,40 @@ def processar_imagem(caminho_imagem, pessoas=None):
 def processar_pdf(caminho_pdf, pessoas=None):
     resultado = {"arquivo": os.path.basename(caminho_pdf), "data": None, "valor": None, "nome": None, "id": None, "ok": False, "erro": None}
 
-    if pdfplumber is None:
-        resultado["erro"] = "pdfplumber não disponível"
+    if pytesseract is None and pdfplumber is None:
+        resultado["erro"] = "pytesseract e pdfplumber não disponíveis"
         return resultado
 
     try:
         texto_completo = ""
-        with pdfplumber.open(caminho_pdf) as pdf:
-            if not pdf.pages:
-                resultado["erro"] = "PDF vazio"
+
+        if pdfplumber is not None:
+            try:
+                with pdfplumber.open(caminho_pdf) as pdf:
+                    for page in pdf.pages:
+                        t = page.extract_text()
+                        if t:
+                            texto_completo += t + "\n"
+            except Exception:
+                pass
+
+        # Fallback: PDF só tem imagem — converte páginas e roda OCR
+        if not texto_completo.strip() and pytesseract is not None:
+            try:
+                import fitz
+                doc = fitz.open(caminho_pdf)
+                for page in doc:
+                    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    texto_completo += pytesseract.image_to_string(img, lang="por", config="--psm 4") + "\n"
+                doc.close()
+            except Exception as e:
+                resultado["erro"] = f"Falha ao processar PDF como imagem: {e}"
                 return resultado
-            
-            for page in pdf.pages:
-                texto_completo += page.extract_text() + "\n"
+
+        if not texto_completo.strip():
+            resultado["erro"] = "Nenhum texto extraído do PDF"
+            return resultado
 
         linhas = [l.strip() for l in texto_completo.splitlines() if l.strip()]
         

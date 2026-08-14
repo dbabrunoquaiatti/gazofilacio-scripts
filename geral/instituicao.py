@@ -276,26 +276,44 @@ def extrair_instituicao_do_texto(linhas):
 def extrair_texto_pdf(caminho_pdf):
     """
     Extrai texto de um arquivo PDF.
-    
+    Tenta pdfplumber primeiro; se não houver texto (PDF de imagem), faz OCR via pymupdf.
+
     Args:
         caminho_pdf (str): Caminho para o arquivo PDF
-    
+
     Returns:
         list: Lista de linhas de texto extraído
     """
-    if pdfplumber is None:
-        return []
-    
-    try:
-        texto_completo = ""
-        with pdfplumber.open(caminho_pdf) as pdf:
-            for page in pdf.pages:
-                texto_completo += page.extract_text() + "\n"
-        
-        linhas = [l.strip() for l in texto_completo.splitlines() if l.strip()]
-        return linhas
-    except Exception:
-        return []
+    linhas = []
+
+    if pdfplumber is not None:
+        try:
+            texto_completo = ""
+            with pdfplumber.open(caminho_pdf) as pdf:
+                for page in pdf.pages:
+                    t = page.extract_text()
+                    if t:
+                        texto_completo += t + "\n"
+            linhas = [l.strip() for l in texto_completo.splitlines() if l.strip()]
+        except Exception:
+            pass
+
+    # Fallback: PDF só tem imagem — converte páginas e roda OCR
+    if not linhas and pytesseract is not None:
+        try:
+            import fitz
+            from PIL import Image as _Image
+            doc = fitz.open(caminho_pdf)
+            for page in doc:
+                pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+                img = _Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                texto = pytesseract.image_to_string(img, lang="por", config="--psm 4")
+                linhas += [l.strip() for l in texto.splitlines() if l.strip()]
+            doc.close()
+        except Exception:
+            pass
+
+    return linhas
 
 
 if __name__ == "__main__":

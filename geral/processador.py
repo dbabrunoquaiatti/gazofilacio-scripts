@@ -60,16 +60,30 @@ def processar_comprovante(caminho_arquivo):
     try:
         # Extrai texto da imagem ou PDF
         if caminho_arquivo.lower().endswith(".pdf"):
+            texto = ""
             try:
                 import pdfplumber
-                texto_completo = ""
                 with pdfplumber.open(caminho_arquivo) as pdf:
                     for page in pdf.pages:
-                        texto_completo += page.extract_text() + "\n"
-                texto = texto_completo
+                        t = page.extract_text()
+                        if t:
+                            texto += t + "\n"
             except ImportError:
-                resultado["erro"] = "pdfplumber não disponível"
-                return resultado
+                pass
+
+            # Fallback: PDF só tem imagem — converte páginas e roda OCR
+            if not texto.strip():
+                try:
+                    import fitz
+                    doc = fitz.open(caminho_arquivo)
+                    for page in doc:
+                        pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        texto += pytesseract.image_to_string(img, lang="por", config="--psm 4") + "\n"
+                    doc.close()
+                except Exception as e:
+                    resultado["erro"] = f"Falha ao processar PDF como imagem: {e}"
+                    return resultado
         else:
             # Processa imagem
             if pytesseract is None:
@@ -110,13 +124,15 @@ def processar_comprovante(caminho_arquivo):
             resultado["erro"] = f"Não foi possível carregar módulo {nome_modulo}: {e}"
             return resultado
         
-        # Chama a função processar_imagem do módulo
-        if not hasattr(modulo, "processar_imagem"):
-            resultado["erro"] = f"Módulo {nome_modulo} não possui função processar_imagem"
+        # Chama a função adequada do módulo (processar_pdf para PDFs, processar_imagem para imagens)
+        eh_pdf = caminho_arquivo.lower().endswith(".pdf")
+        if eh_pdf and hasattr(modulo, "processar_pdf"):
+            resultado_modulo = modulo.processar_pdf(caminho_arquivo)
+        elif hasattr(modulo, "processar_imagem"):
+            resultado_modulo = modulo.processar_imagem(caminho_arquivo)
+        else:
+            resultado["erro"] = f"Módulo {nome_modulo} não possui função processar_imagem ou processar_pdf"
             return resultado
-        
-        # Processa com o módulo específico
-        resultado_modulo = modulo.processar_imagem(caminho_arquivo)
         
         # Mescla resultados
         resultado.update(resultado_modulo)
@@ -180,6 +196,7 @@ def main():
             print(f"Instituição: {resultado['instituicao']} (confiança: {resultado['confianca_instituicao']:.2f})")
             print(f"Módulo: {resultado['modulo_usado']}")
             print(f"Data: {resultado['data']}")
+            print(f"Hora: {resultado.get('hora')}")
             print(f"Valor: {resultado['valor']}")
             print(f"Nome: {resultado['nome']}")
             print(f"ID: {resultado['id']}")
