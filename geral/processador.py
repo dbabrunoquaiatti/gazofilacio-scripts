@@ -74,7 +74,7 @@ def processar_comprovante(caminho_arquivo):
             # Fallback: PDF só tem imagem — converte páginas e roda OCR
             if not texto.strip():
                 try:
-                    import fitz
+                    import pymupdf as fitz
                     doc = fitz.open(caminho_arquivo)
                     for page in doc:
                         pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))

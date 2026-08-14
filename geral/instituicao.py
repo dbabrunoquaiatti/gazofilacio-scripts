@@ -301,7 +301,7 @@ def extrair_texto_pdf(caminho_pdf):
     # Fallback: PDF só tem imagem — converte páginas e roda OCR
     if not linhas and pytesseract is not None:
         try:
-            import fitz
+            import pymupdf as fitz
             from PIL import Image as _Image
             doc = fitz.open(caminho_pdf)
             for page in doc:

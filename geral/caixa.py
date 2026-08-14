@@ -377,7 +377,7 @@ def processar_pdf(caminho_pdf, pessoas=None):
         # Fallback: PDF só tem imagem — converte páginas e roda OCR
         if not texto_completo.strip() and pytesseract is not None:
             try:
-                import fitz
+                import pymupdf as fitz
                 doc = fitz.open(caminho_pdf)
                 for page in doc:
                     pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
@@ -403,7 +403,10 @@ def processar_pdf(caminho_pdf, pessoas=None):
         nome = extrair_nome_do_texto(linhas)
         valor = extrair_valor_correto(texto_completo)
         data = validar_data_no_texto(texto_completo)
-        hora = extrair_hora(texto_completo)
+
+        # Extrai hora da mesma linha da data (DD/MM/YYYY, HH:MM:SS) para evitar falsos positivos
+        m_hora_data = re.search(r"\b\d{2}/\d{2}/\d{4}[,.]?\s*(\d{2}:\d{2}(?::\d{2})?)", texto_completo)
+        hora = m_hora_data.group(1) if m_hora_data else extrair_hora(texto_completo)
 
         pid = achar_id(nome) if nome else None
 
