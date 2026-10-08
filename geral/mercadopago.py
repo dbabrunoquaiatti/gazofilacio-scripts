@@ -254,28 +254,111 @@ def validar_data_no_texto(texto):
     return None
 
 
-def _recuperar_centavos(img, inteiro):
+def _data_to_texto(data):
+    """Reconstrói texto com layout de linhas a partir do resultado de image_to_data."""
+    linhas = {}
+    for i, word in enumerate(data["text"]):
+        word = str(word).strip()
+        if not word:
+            continue
+        chave = (data["block_num"][i], data["par_num"][i], data["line_num"][i])
+        linhas.setdefault(chave, []).append(word)
+    return "\n".join(" ".join(palavras) for palavras in linhas.values())
+
+
+def _achar_rs_num(data):
+    """Retorna (rs_idx, num_idx) do token R$ e do número seguinte no data dict."""
+    rs_idx = None
+    for i, p in enumerate(data["text"]):
+        if re.search(r"R\$|\$", str(p)):
+            rs_idx = i
+            break
+    if rs_idx is None:
+        return None, None
+    num_idx = rs_idx + 1
+    if num_idx >= len(data["text"]):
+        return rs_idx, None
+    return rs_idx, num_idx
+
+
+def _recuperar_superscript_mp(img_gray, data_ocr):
+    """Recupera (inteiro_correto, centavos) pelo superscript do Mercado Pago.
+    Usa image_to_boxes para separar dígitos por tamanho (inteiro=grande, centavos=pequeno),
+    e um crop direto para confirmar os centavos com maior confiança.
+    Retorna (inteiro, centavos) ou None."""
+    try:
+        _, num_idx = _achar_rs_num(data_ocr)
+        if num_idx is None:
+            return None
+        top_num  = data_ocr["top"][num_idx]
+        left_num = data_ocr["left"][num_idx]
+        w_num    = data_ocr["width"][num_idx]
+        h_num    = data_ocr["height"][num_idx]
+
+        # Inteiro: image_to_boxes no crop amplo, filtra caracteres grandes (> 65% do maior)
+        crop_boxes = img_gray.crop((
+            max(0, left_num - 5),
+            max(0, top_num - 50),
+            left_num + w_num + 70,
+            top_num + h_num + 5,
+        ))
+        crop_boxes = crop_boxes.resize((crop_boxes.width * 4, crop_boxes.height * 4), Image.LANCZOS)
+        crop_boxes = ImageEnhance.Contrast(crop_boxes).enhance(3.0)
+        boxes_raw = pytesseract.image_to_boxes(
+            crop_boxes, lang="por",
+            config="--psm 7 -c tessedit_char_whitelist=0123456789"
+        )
+        chars = []
+        for line in boxes_raw.strip().splitlines():
+            parts = line.split()
+            if len(parts) >= 5:
+                chars.append((parts[0], int(parts[1]), int(parts[4]) - int(parts[2])))
+        if not chars:
+            return None
+        max_h = max(h for _, _, h in chars)
+        main = sorted([(c, l) for c, l, h in chars if h >= max_h * 0.65], key=lambda x: x[1])
+        inteiro = "".join(c for c, _ in main)
+
+        # Centavos: crop direto do canto superior-direito do bounding box
+        crop_sup = img_gray.crop((
+            left_num + int(w_num * 0.55),
+            max(0, top_num - 45),
+            left_num + w_num + 60,
+            top_num + int(h_num * 0.75),
+        ))
+        crop_sup = crop_sup.resize((crop_sup.width * 5, crop_sup.height * 5), Image.LANCZOS)
+        crop_sup = ImageEnhance.Contrast(crop_sup).enhance(3.0)
+        txt_sup = pytesseract.image_to_string(
+            crop_sup, lang="por",
+            config="--psm 7 -c tessedit_char_whitelist=0123456789"
+        ).strip()
+        centavos = re.sub(r"[^0-9]", "", txt_sup)
+
+        if inteiro and len(centavos) == 2:
+            return (inteiro, centavos)
+    except Exception:
+        pass
+    return None
+
+
+def _recuperar_centavos(img_gray, inteiro, data_ocr):
     """Faz crop na linha do R$ e re-OCR com whitelist de dígitos para pegar centavos em fonte pequena."""
     try:
-        img_gray = img.convert("L")
-        data = pytesseract.image_to_data(img_gray, lang="por", config="--psm 6",
-                                         output_type=pytesseract.Output.DICT)
-        for i, palavra in enumerate(data["text"]):
-            if re.search(r"R\$|\$", str(palavra)):
-                top  = data["top"][i]
-                left = data["left"][i]
-                crop = img_gray.crop((left, max(0, top - 5), img_gray.width, top + 55))
-                crop = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
-                crop = ImageEnhance.Contrast(crop).enhance(3.0)
-                txt  = pytesseract.image_to_string(
-                    crop, lang="por",
-                    config="--psm 7 -c tessedit_char_whitelist=R$0123456789,."
-                ).strip()
-                digitos = re.sub(r"[^\d]", "", txt)
-                # ex: inteiro="84", digitos="8451" → centavos="51"
-                if digitos.startswith(inteiro) and len(digitos) == len(inteiro) + 2:
-                    return digitos[len(inteiro):]
-                break
+        _, num_idx = _achar_rs_num(data_ocr)
+        if num_idx is None:
+            return None
+        top  = data_ocr["top"][num_idx]
+        left = data_ocr["left"][num_idx]
+        crop = img_gray.crop((left, max(0, top - 5), img_gray.width, top + 55))
+        crop = crop.resize((crop.width * 4, crop.height * 4), Image.LANCZOS)
+        crop = ImageEnhance.Contrast(crop).enhance(3.0)
+        txt  = pytesseract.image_to_string(
+            crop, lang="por",
+            config="--psm 7 -c tessedit_char_whitelist=R$0123456789,."
+        ).strip()
+        digitos = re.sub(r"[^\d]", "", txt)
+        if digitos.startswith(inteiro) and len(digitos) == len(inteiro) + 2:
+            return digitos[len(inteiro):]
     except Exception:
         pass
     return None
@@ -307,15 +390,18 @@ def processar_imagem(caminho_imagem, pessoas=None):
         else:
             # Para imagens, usa PIL e pytesseract
             img = Image.open(caminho_imagem)
-            # Tenta OCR com config padrão
-            texto = pytesseract.image_to_string(img, lang="por", config="--psm 6")
-            
-            # Se não encontrou valor, tenta com PSM 3 (busca colunas de texto) que funciona melhor para valores grandes
+            img_gray = img.convert("L")
+            # image_to_data uma vez: serve para texto E posições (evita reprocessar)
+            data_ocr = pytesseract.image_to_data(img_gray, lang="por", config="--psm 6",
+                                                  output_type=pytesseract.Output.DICT)
+            texto = _data_to_texto(data_ocr)
+
+            # Se não encontrou valor, tenta PSM 3 como fallback
             if not re.search(r"R\$\s*\d+", texto, re.IGNORECASE):
-                texto_psm3 = pytesseract.image_to_string(img, lang="por", config="--psm 3")
+                texto_psm3 = pytesseract.image_to_string(img_gray, lang="por", config="--psm 3")
                 if re.search(r"R\$\s*\d+", texto_psm3, re.IGNORECASE):
-                    # Se PSM 3 encontrou melhor, usa combinação dos dois
                     texto = texto + " " + texto_psm3
+                    data_ocr = None  # posicoes do psm6 nao correspondem ao texto combinado
 
         # Modo debug: salvar texto OCR e os matches de valores para inspeção
         if os.environ.get("DEBUG_OCR"):
@@ -341,11 +427,17 @@ def processar_imagem(caminho_imagem, pessoas=None):
         hora = extrair_hora(texto)
 
         # centavos em fonte pequena ao lado do valor principal — OCR normal perde
-        if valor and re.match(r"^R\$ \d+$", valor) and "img" in dir():
+        if valor and re.match(r"^R\$ \d+$", valor) and "img_gray" in dir() and data_ocr:
             inteiro = re.search(r"\d+", valor).group()
-            centavos = _recuperar_centavos(img, inteiro)
+            centavos = _recuperar_centavos(img_gray, inteiro, data_ocr)
             if centavos:
                 valor = f"R$ {inteiro},{centavos}"
+            else:
+                # Mercado Pago exibe centavos como superscript — crop separado inteiro+centavos
+                sup = _recuperar_superscript_mp(img_gray, data_ocr)
+                if sup:
+                    inteiro, centavos = sup
+                    valor = f"R$ {inteiro},{centavos}"
 
         pid = achar_id(nome) if nome else None
 
