@@ -12,7 +12,7 @@ PESSOAS_FILE = os.path.join(os.path.dirname(__file__), "pessoas.json")
 def buscar_por_alias(alias):
     try:
         headers = {"X-API-Key": TOKEN}
-        response = requests.get(API_URL, headers=headers, params={"alias": alias, "status": "ativo"})
+        response = requests.get(API_URL, headers=headers, params={"alias": alias})
         response.raise_for_status()
         data = response.json()
         resultados = data.get("data", data)
@@ -23,7 +23,7 @@ def buscar_por_alias(alias):
 def buscar_por_nome(nome):
     try:
         headers = {"X-API-Key": TOKEN}
-        response = requests.get(API_URL, headers=headers, params={"nome": nome, "status": "ativo"})
+        response = requests.get(API_URL, headers=headers, params={"nome": nome})
         response.raise_for_status()
         data = response.json()
         resultados = data.get("data", data)
@@ -40,7 +40,7 @@ def buscar_todos():
 
     while True:
         try:
-            params = {"status": "ativo", "limit": limit, "offset": offset}
+            params = {"limit": limit, "offset": offset}
             response = requests.get(API_URL, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
