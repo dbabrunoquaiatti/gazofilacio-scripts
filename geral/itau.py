@@ -165,13 +165,13 @@ def extrair_valor_correto(texto):
     txt = re.sub(r"(?<=\d)\s+(?=\d{3}\b)", ".", txt)
     txt = re.sub(r"(?<=\d)\s+(?=\d)", "", txt)
     txt = re.sub(r"R\s*\$|R\s+S", "R$", txt, flags=re.IGNORECASE)
-    match = re.search(r"(?:Valor|VALOR)\s*[:\-]?\s*(R\$\s*)?(\d+[.,]\d{2})", txt, re.IGNORECASE)
+    match = re.search(r"(?:Valor|VALOR)\s*[:\-]?\s*(R\$\s*)?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b", txt, re.IGNORECASE)
     if match:
         valor_encontrado = match.group(2)
         if match.group(1):
             valor_encontrado = "R$ " + valor_encontrado
         return valor_encontrado
-    pattern = re.compile(r"(R\$\s*)?(\d+[.,]\d{2})", re.IGNORECASE)
+    pattern = re.compile(r"(R\$\s*)?(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\b", re.IGNORECASE)
     matches = list(pattern.finditer(txt))
     if matches:
         for m in matches:
